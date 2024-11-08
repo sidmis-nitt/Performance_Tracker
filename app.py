@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 from dhanhq import dhanhq
 from datetime import datetime
+import yfinance as yf  # Ensure you have yfinance installed: pip install yfinance
 
 # Title of the Streamlit app
-st.title("Trade History and Holdings Viewer")
+st.title("Trade History, Holdings, and Profit/Loss Viewer")
 
 # Input fields for user to provide access URL, from date, and to date in the main window
 access_url = st.text_input("Access URL")
@@ -62,6 +63,54 @@ if access_url:
                 st.dataframe(holdings_data_df)  # Display as a table in Streamlit
             else:
                 st.warning("No valid holdings data to display.")
+        except Exception as e:
+            st.error(f"Failed to fetch holdings data: {e}")
+
+    # Section for Net Profit/Loss
+    st.header("Net Profit/Loss for Holdings")
+    if st.button("Fetch Profit/Loss"):
+        try:
+            holdings_data = dhan.get_holdings()
+            
+            if 'data' in holdings_data and isinstance(holdings_data['data'], list):
+                holdings_list = holdings_data['data']
+                net_profit_loss_list = []
+                total_portfolio_profit_loss = 0
+
+                for holding in holdings_list:
+                    trading_symbol = holding.get('tradingSymbol', '')
+                    avg_cost_price = holding.get('avgCostPrice', 0)
+                    total_qty = holding.get('totalQty', 0)
+                    
+                    # Fetch the current market price from Yahoo Finance
+                    yf_symbol = trading_symbol + ".NS"
+                    ticker = yf.Ticker(yf_symbol)
+                    current_market_price = ticker.history(period="1d")['Close'].iloc[-1]
+                    
+                    total_investment = avg_cost_price * total_qty
+                    current_value = current_market_price * total_qty
+                    net_profit_loss = current_value - total_investment
+                    
+                    net_profit_loss_list.append({
+                        'Trading Symbol': trading_symbol,
+                        'Total Quantity': total_qty,
+                        'Average Cost Price': avg_cost_price,
+                        'Current Market Price': current_market_price,
+                        'Net Profit/Loss (INR)': net_profit_loss
+                    })
+
+                    total_portfolio_profit_loss += net_profit_loss
+                
+                df_profit_loss = pd.DataFrame(net_profit_loss_list)
+                
+                if not df_profit_loss.empty:
+                    st.write("Holdings Net Profit/Loss Data:")
+                    st.dataframe(df_profit_loss)
+                    st.write(f"Overall Portfolio Profit/Loss: {total_portfolio_profit_loss:.2f} INR")
+                else:
+                    st.warning("No holdings data available.")
+            else:
+                st.error("Unexpected holdings data format")
         except Exception as e:
             st.error(f"Failed to fetch holdings data: {e}")
 else:
